@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Android Basics</string>
+    <string name="hello">Hello</string>
+    <string name="hello_world">Hello World</string>
+    <string name="choose_an_item">Choose an item:</string>
+</resources>

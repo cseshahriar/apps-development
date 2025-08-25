@@ -1,0 +1,6 @@
+Layout: three kinds layout have
+1. Constraint Layout
+2. Linear Layout
+3. Relative Layout
+
+

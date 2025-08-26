@@ -1,123 +1,141 @@
 package com.example.androidbasics
 
+import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.widget.ArrayAdapter
-import android.widget.ListView
-import androidx.activity.enableEdgeToEdge
+import android.provider.OpenableColumns
+import android.util.Log
+import android.widget.Button
+import android.widget.ImageView
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowInsetsCompat
-import android.widget.Spinner
-import android.widget.*
-
-import com.example.androidbasics.api.ApiService
-import com.example.androidbasics.api.UserCategory
-import retrofit2.Retrofit
-import retrofit2.converter.gson.GsonConverterFactory
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import com.bumptech.glide.Glide
+import com.example.androidbasics.model.PhotoResponse
+import com.example.androidbasics.network.RetrofitClient
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import android.widget.Toast
-
-
-import android.view.View
-import android.widget.AdapterView
-
+import java.io.File
+import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
+
+    private lateinit var imageView: ImageView
+    private lateinit var selectUploadButton: Button
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
         setContentView(R.layout.activity_main)
 
-        // list view
-        val myListView = findViewById<ListView>(R.id.my_list_view)
-        val fruits = arrayOf("Apple", "Banana", "Cherry", "Grape", "Orange")
-        val adapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_list_item_1, // Built-in layout for single text item
-            fruits
-        )
-        myListView.adapter = adapter
+        imageView = findViewById(R.id.imageView)
+        selectUploadButton = findViewById(R.id.uploadButton)
 
-        // 1. Get a reference to the Spinner
-        val mySpinner: Spinner = findViewById(R.id.my_spinner)
-        val items = arrayOf("Item 1", "Item 2", "Item 3", "Item 4")
+        checkPermission()
 
-        // 3. Create an ArrayAdapter using a built-in spinner layout
-        val spinnerAdapter = ArrayAdapter(
-            this,
-            android.R.layout.simple_spinner_item, // Built-in layout for the single selected item
-            items
-        )
-        spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        mySpinner.adapter = spinnerAdapter
+        // One button: select + upload
+        selectUploadButton.setOnClickListener {
+            openGallery()
+        }
+    }
 
-        // ===================== spinner for API data ==============================================
-        // Spinner for API data
-        val userSpinner: Spinner = findViewById(R.id.user_spinner)
-
-        // Retrofit setup
-        val retrofit = Retrofit.Builder()
-            .baseUrl("https://jsonplaceholder.typicode.com/")
-            .addConverterFactory(GsonConverterFactory.create())
-            .build()
-
-        val api = retrofit.create(ApiService::class.java)
-
-        // Call API
-        api.getUsers().enqueue(object : Callback<List<UserCategory>> {
-            override fun onResponse(
-                call: Call<List<UserCategory>>,
-                response: Response<List<UserCategory>>
+    private fun checkPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.READ_MEDIA_IMAGES
+                ) != PackageManager.PERMISSION_GRANTED
             ) {
-                if (response.isSuccessful) {
-                    val categories = response.body() ?: emptyList()
+                ActivityCompat.requestPermissions(
+                    this, arrayOf(Manifest.permission.READ_MEDIA_IMAGES), 100
+                )
+            }
+        } else {
+            if (ContextCompat.checkSelfPermission(
+                    this, Manifest.permission.READ_EXTERNAL_STORAGE
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                ActivityCompat.requestPermissions(
+                    this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 100
+                )
+            }
+        }
+    }
 
-                    // Extract names
-                    val categoryNames = categories.map { it.name }
+    private fun openGallery() {
+        val intent = Intent(Intent.ACTION_PICK)
+        intent.type = "image/*"
+        galleryLauncher.launch(intent)
+    }
 
-                    // Setup adapter for spinner
-                    val spinnerAdapter = ArrayAdapter(
-                        this@MainActivity,
-                        android.R.layout.simple_spinner_item,
-                        categoryNames
-                    )
-                    spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-                    userSpinner.adapter = spinnerAdapter
+    private val galleryLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == Activity.RESULT_OK) {
+                val selectedUri: Uri? = result.data?.data
+                selectedUri?.let { uri ->
+                    // Show selected image
+                    Glide.with(this).load(uri).into(imageView)
 
-                    // Handle selection
-                    userSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-                        override fun onItemSelected(
-                            parent: AdapterView<*>,
-                            view: View?,
-                            position: Int,
-                            id: Long
-                        ) {
-                            val selected = categories[position]
-                            Toast.makeText(
-                                this@MainActivity,
-                                "Selected: ${selected.name}, ID: ${selected.id}",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-
-                        override fun onNothingSelected(parent: AdapterView<*>) {}
-                    }
+                    // Upload immediately
+                    uploadImage(uri)
                 }
             }
-
-            override fun onFailure(call: Call<List<UserCategory>>, t: Throwable) {
-                Toast.makeText(this@MainActivity, "Error: ${t.message}", Toast.LENGTH_SHORT).show()
-            }
-        })
-
-
-
-        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
-            insets
         }
+
+    private fun uploadImage(uri: Uri) {
+        val file = createFileFromUri(uri)
+
+        val requestFile = RequestBody.create("image/*".toMediaTypeOrNull(), file)
+        val body = MultipartBody.Part.createFormData("image", file.name, requestFile)
+
+        val title = RequestBody.create("text/plain".toMediaTypeOrNull(), "My Test Photo")
+
+        RetrofitClient.instance.uploadPhoto(body, title)
+            .enqueue(object : Callback<PhotoResponse> {
+                override fun onResponse(
+                    call: Call<PhotoResponse>,
+                    response: Response<PhotoResponse>
+                ) {
+                    if (response.isSuccessful) {
+                        Log.d("UPLOAD", "Success: ${response.body()}")
+                        // keep showing selected image (local)
+                    } else {
+                        Log.e("UPLOAD", "Error: ${response.code()}")
+                    }
+                }
+
+                override fun onFailure(call: Call<PhotoResponse>, t: Throwable) {
+                    Log.e("UPLOAD", "Failure: ${t.message}")
+                }
+            })
+    }
+
+    private fun createFileFromUri(uri: Uri): File {
+        val inputStream = contentResolver.openInputStream(uri)!!
+        val file = File(cacheDir, getFileName(uri))
+        val outputStream = FileOutputStream(file)
+        inputStream.copyTo(outputStream)
+        inputStream.close()
+        outputStream.close()
+        return file
+    }
+
+    private fun getFileName(uri: Uri): String {
+        var name = "temp_file"
+        val cursor = contentResolver.query(uri, null, null, null, null)
+        cursor?.use {
+            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            if (cursor.moveToFirst() && nameIndex >= 0) {
+                name = cursor.getString(nameIndex)
+            }
+        }
+        return name
     }
 }

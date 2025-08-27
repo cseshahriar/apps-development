@@ -10,7 +10,9 @@ import android.os.Bundle
 import android.provider.OpenableColumns
 import android.util.Log
 import android.widget.Button
+import android.widget.EditText
 import android.widget.ImageView
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -28,114 +30,22 @@ import java.io.File
 import java.io.FileOutputStream
 
 class MainActivity : AppCompatActivity() {
-
-    private lateinit var imageView: ImageView
-    private lateinit var selectUploadButton: Button
+    private lateinit var editText: EditText
+    private lateinit var button: Button
+    private lateinit var textView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        imageView = findViewById(R.id.imageView)
-        selectUploadButton = findViewById(R.id.uploadButton)
+        editText = findViewById(R.id.edit_text_id)
+        button = findViewById(R.id.button_id)
+        textView = findViewById(R.id.text_view_id)
 
-        checkPermission()
-
-        // One button: select + upload
-        selectUploadButton.setOnClickListener {
-            openGallery()
+        button.setOnClickListener {
+            val inputText = editText.text.toString()
+            textView.text = inputText
         }
     }
 
-    private fun checkPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.READ_MEDIA_IMAGES
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this, arrayOf(Manifest.permission.READ_MEDIA_IMAGES), 100
-                )
-            }
-        } else {
-            if (ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.READ_EXTERNAL_STORAGE
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                ActivityCompat.requestPermissions(
-                    this, arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE), 100
-                )
-            }
-        }
-    }
-
-    private fun openGallery() {
-        val intent = Intent(Intent.ACTION_PICK)
-        intent.type = "image/*"
-        galleryLauncher.launch(intent)
-    }
-
-    private val galleryLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            if (result.resultCode == Activity.RESULT_OK) {
-                val selectedUri: Uri? = result.data?.data
-                selectedUri?.let { uri ->
-                    // Show selected image
-                    Glide.with(this).load(uri).into(imageView)
-
-                    // Upload immediately
-                    uploadImage(uri)
-                }
-            }
-        }
-
-    private fun uploadImage(uri: Uri) {
-        val file = createFileFromUri(uri)
-
-        val requestFile = RequestBody.create("image/*".toMediaTypeOrNull(), file)
-        val body = MultipartBody.Part.createFormData("image", file.name, requestFile)
-
-        val title = RequestBody.create("text/plain".toMediaTypeOrNull(), "My Test Photo")
-
-        RetrofitClient.instance.uploadPhoto(body, title)
-            .enqueue(object : Callback<PhotoResponse> {
-                override fun onResponse(
-                    call: Call<PhotoResponse>,
-                    response: Response<PhotoResponse>
-                ) {
-                    if (response.isSuccessful) {
-                        Log.d("UPLOAD", "Success: ${response.body()}")
-                        // keep showing selected image (local)
-                    } else {
-                        Log.e("UPLOAD", "Error: ${response.code()}")
-                    }
-                }
-
-                override fun onFailure(call: Call<PhotoResponse>, t: Throwable) {
-                    Log.e("UPLOAD", "Failure: ${t.message}")
-                }
-            })
-    }
-
-    private fun createFileFromUri(uri: Uri): File {
-        val inputStream = contentResolver.openInputStream(uri)!!
-        val file = File(cacheDir, getFileName(uri))
-        val outputStream = FileOutputStream(file)
-        inputStream.copyTo(outputStream)
-        inputStream.close()
-        outputStream.close()
-        return file
-    }
-
-    private fun getFileName(uri: Uri): String {
-        var name = "temp_file"
-        val cursor = contentResolver.query(uri, null, null, null, null)
-        cursor?.use {
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (cursor.moveToFirst() && nameIndex >= 0) {
-                name = cursor.getString(nameIndex)
-            }
-        }
-        return name
-    }
 }

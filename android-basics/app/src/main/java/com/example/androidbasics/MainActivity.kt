@@ -2,6 +2,7 @@ package com.example.androidbasics
 
 import android.Manifest
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -34,6 +35,11 @@ class MainActivity : AppCompatActivity() {
     private lateinit var button: Button
     private lateinit var textView: TextView
 
+    companion object {
+        private const val REFERENCE_NAME = "MyPrefsFile"
+        private const val TEXT_KEY = "saveText"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -42,9 +48,18 @@ class MainActivity : AppCompatActivity() {
         button = findViewById(R.id.button_id)
         textView = findViewById(R.id.text_view_id)
 
+        // prev value save
+        val settings = getSharedPreferences(REFERENCE_NAME, Context.MODE_PRIVATE)
+        val saveText = settings.getString(TEXT_KEY, "")
+        textView.text = saveText
+
         button.setOnClickListener {
             val inputText = editText.text.toString()
             textView.text = inputText
+
+            val edit = settings.edit()
+            edit.putString(TEXT_KEY, inputText)
+            edit.apply()
         }
     }
 

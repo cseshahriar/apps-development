@@ -6,7 +6,9 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#E8F5E9"
-    tools:context=".MainActivity">
+    tools:context=".MainActivity"
+    android:padding="20dp"
+    >
 
     <TextView
         android:id="@+id/titleTextView"
@@ -30,6 +32,7 @@
         android:layout_marginBottom="16dp"
         >
         <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/bill_input_edit_text"
             android:inputType="numberDecimal"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -117,7 +120,7 @@
         />
 
     <TextView
-        android:id="@+id/tipTotalAmountTextView"
+        android:id="@+id/resultTextView"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
